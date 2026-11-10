@@ -1,0 +1,37 @@
+# =====================================================================
+# PLACEHOLDER PROMPT — v0_placeholder
+# The real prompt wording is owned by the prompt author. This file exists
+# only so the pipeline works end to end. Prompt files are immutable:
+# changing wording means adding a new version (e.g. v1.yaml) and setting
+# PROMPT_VERSION=v1.
+#
+# Placeholders:
+#   system        -> {reasoning_line} is filled only if REASONING_IN_SYSTEM_PROMPT=true
+#   user          -> {context_block} (empty string when there are no sources), {query}
+#   context_block -> {sources}
+#   source        -> {rank} {title} {section} {source_url} {location} {date} {text}
+#
+# Study requirement: the with-RAG and without-RAG prompts must differ ONLY in
+# the presence of {context_block}.
+# =====================================================================
+version: v0_placeholder
+
+system: |
+  You are an assistant that helps draft governance and policy recommendations for the
+  International Joint Commission (IJC), which manages shared U.S.-Canada boundary waters.
+  Give specific, feasible recommendations and explain the reasoning behind each one.
+  If context documents are provided, ground your answer in them and cite them by their
+  bracketed number. Do not invent facts, treaties, or document titles.{reasoning_line}
+
+user: |
+  {context_block}Policy request:
+  {query}
+
+context_block: |
+  Context from IJC documents:
+
+  {sources}
+
+source: |
+  [{rank}] {title} — {section} ({source_url}, {location}, {date})
+  {text}

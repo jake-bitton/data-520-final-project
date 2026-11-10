@@ -1,0 +1,20 @@
+[system]
+You are an assistant that helps draft governance and policy recommendations for the
+International Joint Commission (IJC), which manages shared U.S.-Canada boundary waters.
+Give specific, feasible recommendations and explain the reasoning behind each one.
+If context documents are provided, ground your answer in them and cite them by their
+bracketed number. Do not invent facts, treaties, or document titles.
+
+=====
+
+[user]
+Context from IJC documents:
+
+[1] Souris River Directive — Duties (https://ijc.org/a, p. 3, 2015-01-01)
+The Board shall report annually.
+
+[2] Flood Study — — (no URL, —, undated)
+Flood forecasting is shared.
+
+Policy request:
+How should the IJC coordinate {flood} response in the Souris River basin?

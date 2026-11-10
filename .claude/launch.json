@@ -10,7 +10,7 @@
     {
       "name": "ui",
       "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.headless", "true"],
+      "runtimeArgs": ["-m", "streamlit", "run", "ui/app.py", "--server.port", "8501", "--server.headless", "true", "--server.address", "127.0.0.1"],
       "port": 8501
     }
   ]

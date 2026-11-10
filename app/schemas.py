@@ -1,7 +1,7 @@
 """Data contracts (design doc, Section 5)."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,42 +30,3 @@ class GenerateRequest(BaseModel):
     reasoning_effort: Optional[ReasoningEffort] = None
     k: Optional[int] = Field(None, ge=LIMITS["k"]["min"], le=LIMITS["k"]["max"])
     seed: Optional[int] = Field(None, ge=LIMITS["seed"]["min"], le=LIMITS["seed"]["max"])
-
-
-class RunSummary(BaseModel):
-    run_id: str
-    created_at: str
-    status: str
-    query: str
-    use_rag: bool
-    model: Optional[str] = None
-    latency_ms: Optional[int] = None
-
-
-class RunDetail(BaseModel):
-    run_id: str
-    created_at: str
-    status: str
-    batch_id: Optional[str] = None
-    app_git_sha: Optional[str] = None
-    query: str
-    use_rag: bool
-    model: Optional[str] = None
-    llm_server: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    reasoning_effort: Optional[str] = None
-    seed: Optional[int] = None
-    k: Optional[int] = None
-    prompt_version: Optional[str] = None
-    rendered_prompt: Optional[Any] = None
-    output: Optional[str] = None
-    reasoning: Optional[str] = None
-    error: Optional[str] = None
-    finish_reason: Optional[str] = None
-    prompt_tokens: Optional[int] = None
-    completion_tokens: Optional[int] = None
-    reasoning_tokens: Optional[int] = None
-    retrieval_ms: Optional[int] = None
-    latency_ms: Optional[int] = None
-    sources: list[Chunk] = []

@@ -2,17 +2,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.schemas import RunDetail, RunSummary
-
 router = APIRouter()
 
 
-@router.get("/runs", response_model=list[RunSummary])
+@router.get("/runs")
 def list_runs(request: Request, limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
     return request.app.state.repo.list_runs(limit=limit, offset=offset)
 
 
-@router.get("/runs/{run_id}", response_model=RunDetail)
+@router.get("/runs/{run_id}")
 def get_run(run_id: str, request: Request):
     run = request.app.state.repo.get_run(run_id)
     if run is None:

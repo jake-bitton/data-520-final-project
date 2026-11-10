@@ -36,7 +36,7 @@ uvicorn app.main:app --reload --port 8000
 Terminal 2 (UI):
 
 ```bash
-streamlit run ui/app.py
+streamlit run ui/app.py --server.address 127.0.0.1
 ```
 
 ## Using the real model (gpt-oss-20b via Ollama)

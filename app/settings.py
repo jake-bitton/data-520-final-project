@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # LLM endpoint (any OpenAI-compatible server: Ollama, vLLM, llama.cpp)
-    llm_base_url: str = "http://localhost:11434/v1"
+    llm_base_url: str = "http://127.0.0.1:11434/v1"
     llm_api_key: str = "ollama"
     llm_model: str = "gpt-oss:20b"
     llm_server: str = "ollama"  # ollama | vllm | llamacpp — logged per run

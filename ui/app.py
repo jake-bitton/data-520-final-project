@@ -24,16 +24,22 @@ with ask_tab:
     st.caption("Each request is independent (no conversation memory), so runs stay reproducible.")
     cols = st.columns(len(ui.EXAMPLE_PROMPTS))
     for col, example in zip(cols, ui.EXAMPLE_PROMPTS):
-        if col.button(example[:60] + "…", help=example, use_container_width=True):
+        if col.button(example[:60] + "…", help=example, width="stretch"):
             st.session_state.query = example
 
     query = st.text_area("Policy request", key="query", height=120, max_chars=4000)
-    submitted = st.button(
-        "Generate", type="primary", disabled=settings is None or st.session_state.generating
+    # on_click runs before the rerun, so the button is drawn disabled for the whole generation.
+    # The flag (not the button's return value) triggers the run: a disabled button returns False.
+    st.button(
+        "Generate", type="primary", disabled=settings is None or st.session_state.generating,
+        on_click=lambda: st.session_state.update(
+            generating=bool(st.session_state.query.strip()), empty_submit=not st.session_state.query.strip()
+        ),
     )
 
-    if submitted and query.strip():
-        st.session_state.generating = True
+    if st.session_state.pop("empty_submit", False):
+        st.warning("Enter a policy request first.")
+    if st.session_state.generating:
         run = {"run_id": None, "sources": [], "reasoning": "", "output": "", "done": None, "error": None}
 
         status_box = st.empty()
@@ -70,8 +76,6 @@ with ask_tab:
             reasoning_box.empty()
         st.session_state.last_run = run
         st.rerun()  # re-render the finished run below with the button re-enabled
-    elif submitted:
-        st.warning("Enter a policy request first.")
 
     run = st.session_state.last_run
     if run:
@@ -90,7 +94,7 @@ with ask_tab:
             st.text(run["reasoning"] or "(none)")
         with st.expander("Sources"):
             ui.sources_list(run["sources"])
-        if done:
+        if done and settings:  # settings is None when the backend is down
             ui.run_footer(run["run_id"], (ui.cached_config() or {}).get("model", ""), done)
 
 # ---------------------------------------------------------------- History
@@ -113,13 +117,12 @@ with history_tab:
         df["RAG"] = df["use_rag"].map({True: "yes", False: "no"})
         view = df[["time", "query", "RAG", "status", "latency_ms"]]
         event = st.dataframe(
-            view, use_container_width=True, hide_index=True,
+            view, width="stretch", hide_index=True,
             on_select="rerun", selection_mode="single-row", key="history_table",
         )
         rows = event.selection.rows if event and event.selection else []
         if rows:
             run_id = df.iloc[rows[0]]["run_id"]
-            st.session_state.history_selection = run_id
             st.divider()
             try:
                 ui.run_detail(api_client.get_run(run_id))

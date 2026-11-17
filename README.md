@@ -43,6 +43,8 @@ Connect WireGuard, set `RAG_ENABLED=true`, and set `QDRANT_READ_ONLY_API_KEY` pr
 
 Queries use the pinned `intfloat/multilingual-e5-small` revision `614241f622f53c4eeff9890bdc4f31cfecc418b3` locally. The model may need an initial download. A follow-up in RAG mode makes an additional model call to rewrite the search query. Missing or failed retrieval is reported; it does not silently fall back to baseline. Empty search results are labeled.
 
+The backend logs Qdrant readiness at startup and when its status changes, and logs search failures without keys or query text. Check the terminal running Uvicorn (or the service's logs) for `Qdrant readiness` or `Qdrant search failed`. Messages distinguish a missing key, connection failure or timeout, HTTP authentication or collection errors, and incompatible vector settings. `/health` refreshes readiness. When the backend runs directly on the same VPS as Qdrant, try `QDRANT_URL=http://127.0.0.1:6333` if Qdrant is bound to loopback; keep the WireGuard address for clients on other machines. Check the actual deployed binding if neither works.
+
 When using OpenAI, retained conversation messages and selected document excerpts are sent to OpenAI. Query embeddings are computed locally and the vector database stays on the VPS. SQLite run records also contain rendered prompts and source excerpts: protect `data/app.db` accordingly.
 
 ## Chat and API

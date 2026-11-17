@@ -45,6 +45,8 @@ def create_app(
         selected_retriever = retriever or (QdrantRetriever(settings) if settings.rag_enabled else NullRetriever())
         if isinstance(selected_retriever, QdrantRetriever):
             await asyncio.to_thread(selected_retriever.check)
+        elif retriever is None:
+            logging.getLogger(__name__).info("Qdrant retrieval is disabled (RAG_ENABLED=false)")
         app.state.orchestrator = Orchestrator(
             settings=settings,
             llm=llm or build_llm(settings),

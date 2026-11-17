@@ -13,14 +13,29 @@ cp .env.example .env  # only if .env does not already exist
 
 The existing `.venv` may point at a removed Windows Store Python. If it cannot launch, create a new environment with a working Python installation. Keep existing `.env` credentials private.
 
+### Linux
+
+From the project directory, using a Linux Python installation:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp -n .env.example .env
+```
+
+If you copied the project from Windows, create a fresh Linux virtual environment instead of using the Windows `.venv`. Edit `.env` with your OpenAI and optional Qdrant settings as described below. `cp -n` preserves an existing `.env`.
+
 Start with `LLM_MODE=fake`, which needs no API key. For OpenAI, set `LLM_MODE=real`, `OPENAI_API_KEY`, and `OPENAI_MODEL` to a text model available to your API account that supports streaming Chat Completions. Restart the backend after editing `.env`. API usage may incur charges. The application sends `max_completion_tokens` but does not send temperature, seed, or reasoning-effort overrides, since support differs by model. An unsupported or inaccessible model produces an error rather than being substituted.
 
-In separate Git Bash terminals, with the environment activated:
+In separate terminals, with the environment activated in each (`source .venv/bin/activate` on Linux or `source .venv/Scripts/activate` in Git Bash on Windows):
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 streamlit run ui/app.py --server.address 127.0.0.1
 ```
+
+Open `http://localhost:8501` in your browser.
 
 ## Private retrieval
 

@@ -12,6 +12,10 @@ from app.schemas import Chunk
 _CHUNK_FIELDS = ("chunk_id", "doc_id", "text", "title", "section", "source_url", "location", "date", "score")
 
 
+class RunStillRunningError(Exception):
+    """The run cannot be deleted while generation is in progress."""
+
+
 class RunsRepo:
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
@@ -29,6 +33,19 @@ class RunsRepo:
         sets = ", ".join(f"{k} = ?" for k in fields)
         with self._conn() as c, c:
             c.execute(f"UPDATE runs SET {sets} WHERE run_id = ?", [*fields.values(), run_id])
+
+    def delete_run(self, run_id: str) -> bool:
+        """Delete one finished run and its sources atomically; return False if absent."""
+        with self._conn() as c, c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT status FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            if row is None:
+                return False
+            if row["status"] == "running":
+                raise RunStillRunningError(run_id)
+            c.execute("DELETE FROM run_sources WHERE run_id = ?", (run_id,))
+            c.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+            return True
 
     def insert_sources(self, run_id: str, chunks: list[Chunk]) -> None:
         if not chunks:

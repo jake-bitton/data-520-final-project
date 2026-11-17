@@ -50,3 +50,32 @@ def test_invalid_params_422(client):
 
 def test_unknown_run_404(client):
     assert client.get("/runs/nope").status_code == 404
+
+
+def test_delete_run_removes_sources_and_preserves_other_runs(client):
+    from app.db.connection import connect
+    from app.schemas import Chunk
+
+    first = stream_events(client, {"query": "first"})[0]["run_id"]
+    other = stream_events(client, {"query": "other"})[0]["run_id"]
+    repo = client.app.state.repo
+    repo.insert_sources(first, [Chunk(chunk_id="a", doc_id="d", text="source")])
+    repo.insert_sources(other, [Chunk(chunk_id="b", doc_id="d", text="other source")])
+
+    assert client.delete(f"/runs/{first}").status_code == 204
+    assert client.get(f"/runs/{first}").status_code == 404
+    assert client.delete(f"/runs/{first}").status_code == 404
+    assert client.get(f"/runs/{other}").json()["sources"][0]["text"] == "other source"
+    with connect(repo.db_path) as conn:
+        assert conn.execute("SELECT count(*) FROM run_sources WHERE run_id = ?", (first,)).fetchone()[0] == 0
+    assert [run["run_id"] for run in client.get("/runs").json()] == [other]
+
+
+def test_delete_running_run_returns_conflict(client):
+    from app.schemas import Chunk
+    repo = client.app.state.repo
+    repo.create_run({"run_id": "active", "created_at": "2026-01-01", "status": "running", "query": "q", "use_rag": 0})
+    repo.insert_sources("active", [Chunk(chunk_id="a", doc_id="d", text="source")])
+    assert client.delete("/runs/active").status_code == 409
+    run = client.get("/runs/active").json()
+    assert run["status"] == "running" and len(run["sources"]) == 1

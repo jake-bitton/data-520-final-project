@@ -57,6 +57,15 @@ def get_run(run_id: str) -> dict:
     return _get(f"/runs/{run_id}")
 
 
+def delete_run(run_id: str) -> None:
+    try:
+        r = _client.delete(f"/runs/{run_id}", timeout=10.0)
+    except httpx.HTTPError as e:
+        raise BackendError("Could not connect to the backend to delete the run.") from e
+    if r.status_code >= 400:
+        raise BackendError(f"{r.status_code}: {_detail(r)}")
+
+
 def generate_stream(payload: dict) -> Iterator[dict]:
     """Yield parsed NDJSON events from POST /generate."""
     timeout = httpx.Timeout(connect=5.0, read=600.0, write=30.0, pool=5.0)

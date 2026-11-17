@@ -49,7 +49,9 @@ When using OpenAI, retained conversation messages and selected document excerpts
 
 The chat retains the most recent 10 complete exchanges, up to 24,000 characters, as model context. Older exchanges remain visible in the session but may be omitted from model context. Failed and truncated answers are excluded. Start a new chat to change between RAG and baseline. Each response has its own citations and source list; run records remain accessible in History and via `/runs`.
 
-`POST /generate` accepts the original `query` and `use_rag` fields, plus optional `history`: an alternating list of `{"role":"user"|"assistant", "content":"..."}` complete exchanges. It streams NDJSON `meta`, `sources`, `reasoning` (when available), `token`, and `done` or `error` events. `GET /health`, `GET /config`, `GET /runs`, and `GET /runs/{run_id}` provide status, non-secret configuration, and run history.
+History is shared by everyone who can access the app. Select a finished run in History and use **Delete run**, then confirm, to permanently remove that run and its stored source records. Other saved runs may still contain its text in their conversation context, and active browser sessions may still display it. Deleting a run does not change the Qdrant corpus or the current chat.
+
+`POST /generate` accepts the original `query` and `use_rag` fields, plus optional `history`: an alternating list of `{"role":"user"|"assistant", "content":"..."}` complete exchanges. It streams NDJSON `meta`, `sources`, `reasoning` (when available), `token`, and `done` or `error` events. `GET /health`, `GET /config`, `GET /runs`, and `GET /runs/{run_id}` provide status, non-secret configuration, and run history. `DELETE /runs/{run_id}` deletes a finished run; it returns 204 on success, 404 if absent, and 409 if still running.
 
 ```bash
 pytest -q

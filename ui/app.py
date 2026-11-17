@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
 import pandas as pd
 import streamlit as st
 import api_client
@@ -85,6 +86,8 @@ with chat:
 
 with history_tab:
     st.button("Refresh")
+    if st.session_state.pop("history_deleted", False):
+        st.success("Run deleted.")
     try:
         runs = api_client.list_runs(limit=200)
     except api_client.BackendError as exc:
@@ -98,11 +101,43 @@ with history_tab:
         df["time"] = pd.to_datetime(df["created_at"]).dt.tz_convert(local_tz).dt.strftime("%Y-%m-%d %H:%M:%S")
         df["query"] = df["query"].str.slice(0, 90)
         df["RAG"] = df["use_rag"].map({True: "yes", False: "no"})
+        # Reset row selection when other sessions add or delete runs, so a row index
+        # cannot silently refer to a different run after a refresh.
+        row_ids = "|".join(df["run_id"].astype(str))
+        table_version = hashlib.sha256(row_ids.encode()).hexdigest()[:16]
         event = st.dataframe(df[["time", "query", "RAG", "status", "latency_ms"]], width="stretch",
-                             hide_index=True, on_select="rerun", selection_mode="single-row", key="history_table")
+                             hide_index=True, on_select="rerun", selection_mode="single-row",
+                             key=f"history_table_{table_version}", alt="Saved run history")
         rows = event.selection.rows if event and event.selection else []
         if rows:
+            selected_id = df.iloc[rows[0]]["run_id"]
             try:
-                ui.run_detail(api_client.get_run(df.iloc[rows[0]]["run_id"]))
+                run = api_client.get_run(selected_id)
             except api_client.BackendError as exc:
                 st.error(str(exc))
+                st.session_state.pop("delete_run_pending", None)
+            else:
+                ui.run_detail(run)
+                if st.session_state.get("delete_run_pending") != selected_id:
+                    st.session_state.pop("delete_run_pending", None)
+                if st.session_state.get("delete_run_pending") == selected_id:
+                    st.warning("Permanently delete this shared history entry?")
+                    st.text(run["query"])
+                    confirm, cancel = st.columns(2)
+                    if confirm.button("Confirm delete", type="primary"):
+                        try:
+                            api_client.delete_run(selected_id)
+                        except api_client.BackendError as exc:
+                            st.error(str(exc))
+                        else:
+                            st.session_state.pop("delete_run_pending", None)
+                            st.session_state.history_deleted = True
+                            st.rerun()
+                    if cancel.button("Cancel"):
+                        st.session_state.pop("delete_run_pending", None)
+                        st.rerun()
+                elif st.button("Delete run", disabled=run["status"] == "running"):
+                    st.session_state.delete_run_pending = selected_id
+                    st.rerun()
+        else:
+            st.session_state.pop("delete_run_pending", None)

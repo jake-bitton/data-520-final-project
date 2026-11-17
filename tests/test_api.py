@@ -11,7 +11,7 @@ def test_health_and_config(client):
     h = client.get("/health").json()
     assert h["status"] == "ok" and h["llm_reachable"] and h["rag_available"] is False
     c = client.get("/config").json()
-    assert c["prompt_version"] == "v0_placeholder"
+    assert c["prompt_version"] == "v1_conversation"
     assert {"temperature", "max_tokens", "reasoning_effort", "k", "seed"} <= set(c["defaults"])
     assert c["limits"]["max_tokens"]["max"] > c["defaults"]["max_tokens"]
 

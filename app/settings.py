@@ -27,11 +27,25 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # LLM endpoint (any OpenAI-compatible server: Ollama, vLLM, llama.cpp)
-    llm_base_url: str = "http://127.0.0.1:11434/v1"
-    llm_api_key: str = "ollama"
-    llm_model: str = "gpt-oss:20b"
-    llm_server: str = "ollama"  # ollama | vllm | llamacpp — logged per run
-    llm_mode: Literal["real", "fake"] = "real"
+    openai_api_key: str = ""
+    openai_model: str = ""
+    llm_mode: Literal["real", "fake"] = "fake"
+    qdrant_url: str = "http://10.66.66.1:6333"
+    qdrant_collection: str = "ijc_policy_with_pdfs_20261116"
+    qdrant_read_only_api_key: str = ""
+    rag_enabled: bool = False
+
+    @property
+    def llm_model(self) -> str:
+        return self.openai_model or ("fake" if self.llm_mode == "fake" else "")
+
+    @property
+    def llm_base_url(self) -> str:
+        return "https://api.openai.com/v1"
+
+    @property
+    def llm_server(self) -> str:
+        return "openai"
 
     # Where the server puts reasoning text in a streamed delta. Field names vary
     # by server/version; confirm in the Phase 0 smoke test and edit if needed.
@@ -57,7 +71,7 @@ class Settings(BaseSettings):
     fake_delay_s: float = 0.02
 
     # Prompts and storage
-    prompt_version: str = "v0_placeholder"
+    prompt_version: str = "v1_conversation"
     prompts_dir: Path = ROOT / "config" / "prompts"
     db_path: Path = ROOT / "data" / "app.db"
 

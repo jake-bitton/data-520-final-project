@@ -27,7 +27,7 @@ def test_success(make_orchestrator):
     assert run["output"] == "".join(e["text"] for e in events if e["type"] == "token")
     assert run["reasoning"] and run["reasoning"] not in run["output"]
     assert run["rendered_prompt"][0]["role"] == "system"
-    assert run["prompt_version"] == "v0_placeholder"
+    assert run["prompt_version"] == "v1_conversation"
     assert run["app_git_sha"] == "test"
     assert run["finish_reason"] == "stop"
 

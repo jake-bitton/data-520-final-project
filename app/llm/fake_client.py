@@ -42,6 +42,11 @@ class FakeLLMClient(LLMClient):
 
     async def stream(self, messages: list[dict], params: GenParams) -> AsyncIterator[StreamItem]:
         user_msg = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        if messages and "[rewrite-v1]" in messages[0]["content"] and self.behavior == "normal":
+            previous = next((m["content"] for m in messages[1:] if m["role"] == "user"), "")
+            yield LLMChunk("content", f"{previous} {user_msg}".strip())
+            yield LLMFinal(finish_reason="stop", usage={})
+            return
         n_sources = len(re.findall(r"^\[\d+\]", user_msg, flags=re.M))
         query = user_msg.strip().splitlines()[-1][:120] if user_msg.strip() else ""
 

@@ -19,6 +19,8 @@ async def generate(req: GenerateRequest, request: Request):
         orch.check_request(req)
     except RagUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     async def event_stream():
         async for event in orch.run(req):

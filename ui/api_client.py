@@ -72,3 +72,5 @@ def generate_stream(payload: dict) -> Iterator[dict]:
         raise BackendError(f"Backend is not reachable at {API_URL}. Start it with `uvicorn app.main:app`.") from e
     except httpx.ReadTimeout as e:
         raise BackendError("Timed out waiting for the model. It may still be loading; try again.") from e
+    except httpx.HTTPError as e:
+        raise BackendError("The connection to the backend was interrupted.") from e

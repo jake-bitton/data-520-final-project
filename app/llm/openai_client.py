@@ -17,10 +17,12 @@ log = logging.getLogger(__name__)
 class OpenAICompatClient(LLMClient):
     def __init__(self, settings: Settings):
         self.settings = settings
+        if settings.llm_mode == "real" and (not settings.openai_api_key or not settings.openai_model):
+            raise ValueError("OPENAI_API_KEY and OPENAI_MODEL are required in real mode")
         # SDK retries disabled: we retry only connection errors and 5xx, never 4xx.
         self.client = AsyncOpenAI(
             base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
+            api_key=settings.openai_api_key or "fake",
             timeout=httpx.Timeout(settings.llm_timeout_s, connect=10.0),
             max_retries=0,
         )
@@ -32,12 +34,8 @@ class OpenAICompatClient(LLMClient):
             messages=messages,
             stream=True,
             stream_options={"include_usage": True},
-            temperature=params.temperature,
-            max_tokens=params.max_tokens,
-            extra_body={"reasoning_effort": params.reasoning_effort},
+            max_completion_tokens=params.max_tokens,
         )
-        if params.seed is not None:
-            kwargs["seed"] = params.seed
 
         attempts = self.settings.llm_max_retries + 1
         for attempt in range(1, attempts + 1):
@@ -52,11 +50,11 @@ class OpenAICompatClient(LLMClient):
                 if attempt == attempts:
                     raise LLMError(
                         f"Could not reach the LLM server at {self.settings.llm_base_url}. "
-                        f"Is {self.settings.llm_server} running and is '{params.model}' pulled?"
+                        "Check your internet connection."
                     ) from e
             except APIStatusError as e:
                 if e.status_code < 500 or attempt == attempts:
-                    raise LLMError(f"LLM server returned {e.status_code}: {e.message}") from e
+                    raise LLMError(f"OpenAI returned HTTP {e.status_code}; check credentials, model access, quota, and request settings.") from e
             await asyncio.sleep(min(2**attempt, 8))
             log.warning("Retrying LLM request (attempt %d/%d)", attempt + 1, attempts)
 
@@ -101,8 +99,8 @@ class OpenAICompatClient(LLMClient):
             async with httpx.AsyncClient(timeout=5.0) as c:
                 r = await c.get(
                     self.settings.llm_base_url.rstrip("/") + "/models",
-                    headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+                    headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
                 )
-                return r.status_code < 500
+                return r.is_success
         except Exception:
             return False

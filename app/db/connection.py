@@ -19,3 +19,7 @@ def init_db(db_path: Path) -> None:
     with connect(db_path) as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+        for name in ("retrieval_query", "retrieval_collection", "retrieval_release", "embedding_revision", "rewrite_prompt", "rewrite_output", "rewrite_usage"):
+            if name not in columns:
+                conn.execute(f"ALTER TABLE runs ADD COLUMN {name} TEXT")

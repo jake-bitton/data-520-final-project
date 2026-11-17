@@ -9,9 +9,9 @@ from typing import AsyncIterator, Literal, Optional, Union
 @dataclass
 class GenParams:
     model: str
-    temperature: float
+    temperature: Optional[float]
     max_tokens: int
-    reasoning_effort: str
+    reasoning_effort: Optional[str]
     seed: Optional[int] = None
 
 

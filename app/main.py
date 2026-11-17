@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -17,6 +18,7 @@ from app.pipeline.orchestrator import Orchestrator
 from app.pipeline.prompt_builder import PromptBuilder
 from app.retrieval.base import Retriever
 from app.retrieval.null import NullRetriever
+from app.retrieval.qdrant import QdrantRetriever
 from app.settings import Settings, get_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -40,10 +42,13 @@ def create_app(
         init_db(settings.db_path)
         repo = RunsRepo(settings.db_path)
         app.state.repo = repo
+        selected_retriever = retriever or (QdrantRetriever(settings) if settings.rag_enabled else NullRetriever())
+        if isinstance(selected_retriever, QdrantRetriever):
+            await asyncio.to_thread(selected_retriever.check)
         app.state.orchestrator = Orchestrator(
             settings=settings,
             llm=llm or build_llm(settings),
-            retriever=retriever or NullRetriever(),  # Phase 3: ChromaRetriever
+            retriever=selected_retriever,
             prompt_builder=PromptBuilder(
                 settings.prompts_dir, settings.prompt_version, settings.reasoning_in_system_prompt
             ),

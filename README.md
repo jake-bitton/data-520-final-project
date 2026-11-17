@@ -1,98 +1,43 @@
-# IJC Policy Assistant — baseline LLM pipeline + front-end (Phases 0–2)
+# IJC Policy Assistant
 
-Implements the *LLM Pipeline and Front-End Design (Phases 0–2)* doc for
-**Strategies to Avoid Spilling Water**: a FastAPI backend that sends policy requests to a
-locally served gpt-oss model through an OpenAI-compatible API, logs every run to SQLite,
-and a Streamlit UI for asking questions and browsing run history. Retrieval (Phase 3) and
-evaluation (Phase 5) plug into the seams already here.
+FastAPI and Streamlit provide a conversational policy assistant, with optional retrieval from the private IJC Qdrant corpus. Individual runs, prompts, source excerpts and usage remain in SQLite; conversation memory lasts only for the current Streamlit session.
 
-```
-Streamlit UI (ui/) --HTTP--> FastAPI (app/)
-                               Orchestrator -> Retriever (NullRetriever now, ChromaRetriever in Phase 3)
-                                            -> PromptBuilder (config/prompts/<version>.yaml)
-                                            -> LLMClient (OpenAICompatClient | FakeLLMClient)
-                                            -> RunsRepo (SQLite: runs, run_sources)
-```
-
-## Setup
+## Setup (Git Bash on Windows)
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-copy .env.example .env          # macOS/Linux: cp .env.example .env
+source .venv/Scripts/activate
+python -m pip install -r requirements.txt
+cp .env.example .env  # only if .env does not already exist
 ```
 
-`.env.example` starts in **fake mode** (`LLM_MODE=fake`), so everything works with no model.
+The existing `.venv` may point at a removed Windows Store Python. If it cannot launch, create a new environment with a working Python installation. Keep existing `.env` credentials private.
 
-## Run
+Start with `LLM_MODE=fake`, which needs no API key. For OpenAI, set `LLM_MODE=real`, `OPENAI_API_KEY`, and `OPENAI_MODEL` to a text model available to your API account that supports streaming Chat Completions. Restart the backend after editing `.env`. API usage may incur charges. The application sends `max_completion_tokens` but does not send temperature, seed, or reasoning-effort overrides, since support differs by model. An unsupported or inaccessible model produces an error rather than being substituted.
 
-Terminal 1 (backend):
+In separate Git Bash terminals, with the environment activated:
 
 ```bash
 uvicorn app.main:app --reload --port 8000
-```
-
-Terminal 2 (UI):
-
-```bash
 streamlit run ui/app.py --server.address 127.0.0.1
 ```
 
-## Using the real model (gpt-oss-20b via Ollama)
+## Private retrieval
 
-```bash
-ollama pull gpt-oss:20b
-```
+Connect WireGuard, set `RAG_ENABLED=true`, and set `QDRANT_READ_ONLY_API_KEY` privately in `.env`. Defaults are `QDRANT_URL=http://10.66.66.1:6333` and `QDRANT_COLLECTION=ijc_policy_with_pdfs_20261116`. The collection must already exist with 384-dimensional cosine vectors. No corpus ingestion occurs. The backend checks collection access on startup and health checks. If unreachable, inspect the active WireGuard route and deployed private server binding; the checked-in Qdrant Compose file maps only loopback. Never expose Qdrant publicly to solve this.
 
-Then set `LLM_MODE=real` in `.env` and restart the backend. The 20B model needs roughly
-16 GB of memory. For vLLM: `vllm serve openai/gpt-oss-20b`, set
-`LLM_BASE_URL=http://localhost:8001/v1`, `LLM_MODEL=openai/gpt-oss-20b`, `LLM_SERVER=vllm`
-(run vLLM on a port other than the API's 8000).
+Queries use the pinned `intfloat/multilingual-e5-small` revision `614241f622f53c4eeff9890bdc4f31cfecc418b3` locally. The model may need an initial download. A follow-up in RAG mode makes an additional model call to rewrite the search query. Missing or failed retrieval is reported; it does not silently fall back to baseline. Empty search results are labeled.
 
-### Phase 0 smoke test (do this once per server)
+When using OpenAI, retained conversation messages and selected document excerpts are sent to OpenAI. Query embeddings are computed locally and the vector database stays on the VPS. SQLite run records also contain rendered prompts and source excerpts: protect `data/app.db` accordingly.
 
-```bash
-curl http://localhost:11434/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"gpt-oss:20b\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"Say hi\"}],\"reasoning_effort\":\"low\"}"
-```
+## Chat and API
 
-Record where the reasoning text appears (`reasoning` vs `reasoning_content`), which usage
-fields come back, and the finish reasons. If the field name differs, set `REASONING_FIELDS`.
-If reasoning token counts don't change between `low` and `high`, set
-`REASONING_IN_SYSTEM_PROMPT=true`.
+The chat retains the most recent 10 complete exchanges, up to 24,000 characters, as model context. Older exchanges remain visible in the session but may be omitted from model context. Failed and truncated answers are excluded. Start a new chat to change between RAG and baseline. Each response has its own citations and source list; run records remain accessible in History and via `/runs`.
 
-## API
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/health` | status, LLM reachable, RAG available |
-| GET | `/config` | model, server, prompt version, defaults + limits |
-| POST | `/generate` | NDJSON stream: `meta`, `sources`, `reasoning`*, `token`*, `done` or `error` |
-| GET | `/runs?limit&offset` | run summaries |
-| GET | `/runs/{run_id}` | full run record with sources |
-
-Example: `curl -N -X POST localhost:8000/generate -H "Content-Type: application/json" -d "{\"query\":\"Propose a flood governance structure\"}"`
-
-`use_rag=true` returns **400** until a corpus is connected; there is no silent fallback to the baseline.
-
-## Tests
+`POST /generate` accepts the original `query` and `use_rag` fields, plus optional `history`: an alternating list of `{"role":"user"|"assistant", "content":"..."}` complete exchanges. It streams NDJSON `meta`, `sources`, `reasoning` (when available), `token`, and `done` or `error` events. `GET /health`, `GET /config`, `GET /runs`, and `GET /runs/{run_id}` provide status, non-secret configuration, and run history.
 
 ```bash
 pytest -q
 ```
 
-No test needs a model or GPU. Regenerate prompt golden files after an intentional template
-change with `UPDATE_GOLDEN=1 pytest tests/test_prompt_builder.py`.
-
-## Prompts
-
-`config/prompts/v0_placeholder.yaml` is a **placeholder**. The prompt author adds new
-immutable versions (e.g. `v1.yaml`) and the team switches with `PROMPT_VERSION`. Every run
-stores the prompt version and the exact rendered messages. The with-RAG and without-RAG
-prompts must differ only by the `{context_block}`.
-
-## Phase 3 handoff
-
-Implement `ChromaRetriever(Retriever)` in `app/retrieval/`, pass it to `create_app` /
-the lifespan in `app/main.py`, and `rag_available` becomes true. The orchestrator,
-`run_sources` logging, the `sources` event and the UI Sources expander already handle chunks.
+Tests use fakes/mocks and do not require an OpenAI key or the VPS. A real end-to-end check requires valid API credentials, model access, WireGuard, and the read-only Qdrant key.

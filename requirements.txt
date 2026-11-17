@@ -5,6 +5,8 @@ pydantic==2.14.3
 pydantic-settings==2.16.2
 openai==3.48.0
 httpx==0.28.1
+qdrant-client>=1.12,<2
+sentence-transformers>=3,<6
 PyYAML==6.0.3
 # Front-end
 streamlit==1.67.0

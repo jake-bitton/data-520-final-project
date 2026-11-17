@@ -35,7 +35,7 @@ class PromptBuilder:
         self.template = data
         self.reasoning_in_system = reasoning_in_system
 
-    def render(self, query: str, sources: list[Chunk], reasoning_effort: str = "medium") -> list[dict]:
+    def render(self, query: str, sources: list[Chunk], reasoning_effort: str = "medium", history: list[dict] | None = None) -> list[dict]:
         t = self.template
         reasoning_line = f"\nReasoning: {reasoning_effort}" if self.reasoning_in_system else ""
         system = _fill(t["system"], reasoning_line=reasoning_line).strip()
@@ -60,4 +60,4 @@ class PromptBuilder:
             context_block = ""
 
         user = _fill(t["user"], context_block=context_block, query=query.strip()).strip()
-        return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        return [{"role": "system", "content": system}, *(history or []), {"role": "user", "content": user}]

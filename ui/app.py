@@ -1,112 +1,95 @@
-"""Streamlit front-end v1.  Run:  streamlit run ui/app.py"""
+"""Session-based chat with a separate per-run archive."""
 from __future__ import annotations
 
 from datetime import datetime
-
 import pandas as pd
 import streamlit as st
-
 import api_client
 import components as ui
 
 st.set_page_config(page_title="IJC Policy Assistant", page_icon="💧", layout="wide")
 st.title("IJC Policy Assistant")
 st.info(ui.DISCLAIMER, icon="⚠️")
-
-for key, default in {"last_run": None, "query": "", "generating": False}.items():
-    st.session_state.setdefault(key, default)
-
+st.session_state.setdefault("turns", [])
+st.session_state.setdefault("chat_mode", None)
 settings = ui.sidebar()
-ask_tab, history_tab = st.tabs(["Ask", "History"])
+chat, history_tab = st.tabs(["Chat", "History"])
 
-# ---------------------------------------------------------------- Ask
-with ask_tab:
-    st.caption("Each request is independent (no conversation memory), so runs stay reproducible.")
-    cols = st.columns(len(ui.EXAMPLE_PROMPTS))
-    for col, example in zip(cols, ui.EXAMPLE_PROMPTS):
-        if col.button(example[:60] + "…", help=example, width="stretch"):
-            st.session_state.query = example
+with chat:
+    if st.button("New chat"):
+        st.session_state.turns = []
+        st.session_state.chat_mode = None
+        st.rerun()
+    st.caption("Conversation memory lasts for this browser session. Runs are saved separately.")
+    mismatch = bool(settings and st.session_state.turns and st.session_state.chat_mode != settings["use_rag"])
+    if mismatch:
+        st.warning("Start a new chat to switch between RAG and baseline mode.")
+    for turn in st.session_state.turns:
+        with st.chat_message("user"):
+            st.markdown(turn["query"])
+        with st.chat_message("assistant"):
+            if turn["output"]:
+                st.markdown(turn["output"])
+            if turn.get("error"):
+                st.error(turn["error"])
+            done = turn.get("done") or {}
+            if done.get("status") == "truncated":
+                ui.truncation_warning()
+            for warning in done.get("warnings", []):
+                st.warning(warning)
+            if done and not turn["output"]:
+                st.warning("The model returned an empty answer.")
+            if turn.get("reasoning"):
+                with st.expander("Model reasoning"):
+                    st.text(turn["reasoning"])
+            with st.expander("Sources"):
+                if turn.get("sources"):
+                    ui.sources_list(turn["sources"])
+                else:
+                    st.caption("No sources for this response.")
+            if done:
+                ui.run_footer(turn.get("run_id"), (ui.cached_config() or {}).get("model", ""), done)
 
-    query = st.text_area("Policy request", key="query", height=120, max_chars=4000)
-    # on_click runs before the rerun, so the button is drawn disabled for the whole generation.
-    # The flag (not the button's return value) triggers the run: a disabled button returns False.
-    st.button(
-        "Generate", type="primary", disabled=settings is None or st.session_state.generating,
-        on_click=lambda: st.session_state.update(
-            generating=bool(st.session_state.query.strip()), empty_submit=not st.session_state.query.strip()
-        ),
-    )
+    query = st.chat_input("Ask about IJC policy", disabled=settings is None or mismatch, max_chars=4000, submit_mode="disable")
+    if query and settings:
+        prior = []
+        for turn in st.session_state.turns:
+            if (turn.get("done") or {}).get("status") == "completed" and turn.get("output") and not turn.get("error"):
+                prior.extend([{"role": "user", "content": turn["query"]}, {"role": "assistant", "content": turn["output"]}])
+        st.session_state.chat_mode = settings["use_rag"]
+        run = {"query": query, "run_id": None, "sources": [], "reasoning": "", "output": "", "done": None, "error": None}
+        with st.chat_message("user"):
+            st.markdown(query)
+        with st.chat_message("assistant"):
+            status = st.empty()
+            answer = st.empty()
+            status.info("Generating response…")
+            try:
+                for ev in api_client.generate_stream({"query": query, "history": prior, **settings}):
+                    kind = ev["type"]
+                    if kind == "meta": run["run_id"] = ev["run_id"]
+                    elif kind == "sources": run["sources"] = ev["chunks"]
+                    elif kind == "reasoning": run["reasoning"] += ev["text"]
+                    elif kind == "token":
+                        run["output"] += ev["text"]
+                        answer.markdown(run["output"] + "▌")
+                    elif kind == "done": run["done"] = ev
+                    elif kind == "error": run["error"] = ev["message"]
+                if not run["done"] and not run["error"]:
+                    run["error"] = "The response stream ended unexpectedly."
+            except api_client.BackendError as exc:
+                run["error"] = str(exc)
+            status.empty()
+        st.session_state.turns.append(run)
+        st.rerun()
 
-    if st.session_state.pop("empty_submit", False):
-        st.warning("Enter a policy request first.")
-    if st.session_state.generating:
-        run = {"run_id": None, "sources": [], "reasoning": "", "output": "", "done": None, "error": None}
-
-        status_box = st.empty()
-        with st.expander("Model reasoning", expanded=False):
-            reasoning_box = st.empty()
-        answer_box = st.empty()
-        status_box.info("Thinking… (local reasoning models can take a while)", icon="🤔")
-
-        try:
-            for ev in api_client.generate_stream({"query": query, **settings}):
-                t = ev["type"]
-                if t == "meta":
-                    run["run_id"] = ev["run_id"]
-                elif t == "sources":
-                    run["sources"] = ev["chunks"]
-                elif t == "reasoning":
-                    run["reasoning"] += ev["text"]
-                    reasoning_box.text(run["reasoning"])
-                elif t == "token":
-                    if not run["output"]:
-                        status_box.empty()
-                    run["output"] += ev["text"]
-                    answer_box.markdown(run["output"] + "▌")
-                elif t == "done":
-                    run["done"] = ev
-                elif t == "error":
-                    run["error"] = ev["message"]
-        except api_client.BackendError as e:
-            run["error"] = str(e)
-        finally:
-            st.session_state.generating = False
-            status_box.empty()
-            answer_box.empty()
-            reasoning_box.empty()
-        st.session_state.last_run = run
-        st.rerun()  # re-render the finished run below with the button re-enabled
-
-    run = st.session_state.last_run
-    if run:
-        if run["error"]:
-            st.error(run["error"])
-        done = run.get("done") or {}
-        if done.get("status") == "truncated":
-            ui.truncation_warning()
-        for w in done.get("warnings") or []:
-            st.warning(w)
-        if run["output"]:
-            st.markdown(run["output"])
-        elif done:
-            st.warning("The model returned an empty answer.")
-        with st.expander("Model reasoning"):
-            st.text(run["reasoning"] or "(none)")
-        with st.expander("Sources"):
-            ui.sources_list(run["sources"])
-        if done and settings:  # settings is None when the backend is down
-            ui.run_footer(run["run_id"], (ui.cached_config() or {}).get("model", ""), done)
-
-# ---------------------------------------------------------------- History
 with history_tab:
-    if st.button("Refresh"):
-        pass
+    st.button("Refresh")
     try:
         runs = api_client.list_runs(limit=200)
-    except api_client.BackendError as e:
-        st.error(str(e))
+    except api_client.BackendError as exc:
+        st.error(str(exc))
         runs = []
-
     if not runs:
         st.caption("No runs yet.")
     else:
@@ -115,18 +98,11 @@ with history_tab:
         df["time"] = pd.to_datetime(df["created_at"]).dt.tz_convert(local_tz).dt.strftime("%Y-%m-%d %H:%M:%S")
         df["query"] = df["query"].str.slice(0, 90)
         df["RAG"] = df["use_rag"].map({True: "yes", False: "no"})
-        view = df[["time", "query", "RAG", "status", "latency_ms"]]
-        event = st.dataframe(
-            view, width="stretch", hide_index=True,
-            on_select="rerun", selection_mode="single-row", key="history_table",
-        )
+        event = st.dataframe(df[["time", "query", "RAG", "status", "latency_ms"]], width="stretch",
+                             hide_index=True, on_select="rerun", selection_mode="single-row", key="history_table")
         rows = event.selection.rows if event and event.selection else []
         if rows:
-            run_id = df.iloc[rows[0]]["run_id"]
-            st.divider()
             try:
-                ui.run_detail(api_client.get_run(run_id))
-            except api_client.BackendError as e:
-                st.error(str(e))
-        else:
-            st.caption("Select a row to see the full run.")
+                ui.run_detail(api_client.get_run(df.iloc[rows[0]]["run_id"]))
+            except api_client.BackendError as exc:
+                st.error(str(exc))

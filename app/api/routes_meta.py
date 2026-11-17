@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
+import asyncio
+from app.retrieval.qdrant import QdrantRetriever
 
 from app.settings import LIMITS
 
@@ -11,6 +13,8 @@ router = APIRouter()
 async def health(request: Request):
     orch = request.app.state.orchestrator
     llm_ok = await orch.llm.ping()  # real ping: also warms a cold model server
+    if isinstance(orch.retriever, QdrantRetriever):
+        await asyncio.to_thread(orch.retriever.check)
     return {
         "status": "ok",
         "llm_reachable": llm_ok,
